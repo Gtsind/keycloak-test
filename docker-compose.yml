@@ -16,7 +16,7 @@ services:
       retries: 10
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.5
+    image: quay.io/keycloak/keycloak:26.6
     command: start-dev
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
@@ -59,6 +59,7 @@ services:
       KEYCLOAK_REALM: ${KEYCLOAK_REALM}
       KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID}
       KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET}
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-}
     ports:
       - "8000:8000"
     depends_on:
