@@ -29,3 +29,25 @@ class Membership(Base):
     keycloak_user_id: Mapped[UUID]
     role: Mapped[str]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class SubscriptionStatus(str, enum.Enum):
+    active = "active"
+    suspended = "suspended"
+    cancelled = "cancelled"
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+    __table_args__ = (UniqueConstraint("organization_id", "app_code"),)
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    app_code: Mapped[str] = mapped_column(index=True)
+    status: Mapped[SubscriptionStatus] = mapped_column(
+        Enum(SubscriptionStatus, name="subscription_status"),
+        default=SubscriptionStatus.active,
+    )
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())

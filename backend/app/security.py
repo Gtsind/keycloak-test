@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.db import get_session
-from app.models import Membership
+from app.models import Membership, Subscription, SubscriptionStatus
 
 bearer_scheme = HTTPBearer()
 
@@ -116,6 +116,29 @@ async def get_target_membership(
 
 
 TargetMembershipDep = Annotated[Membership, Depends(get_target_membership)]
+
+
+def require_app_access(app_code: str):
+    async def _dep(
+        user: CurrentUserDep,
+        session: Annotated[AsyncSession, Depends(get_session)],
+    ) -> list[tuple[UUID, str]]:
+        rows = (await session.execute(
+            select(Membership.organization_id, Membership.role)
+            .join(Subscription, Subscription.organization_id == Membership.organization_id)
+            .where(
+                Membership.keycloak_user_id == user.sub,
+                Subscription.app_code == app_code,
+                Subscription.status == SubscriptionStatus.active,
+            )
+        )).all()
+        if not rows:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"no active subscription grants access to '{app_code}'",
+            )
+        return [(org_id, role) for org_id, role in rows]
+    return _dep
 
 
 async def require_org_read_access(
