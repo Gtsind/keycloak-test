@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from app import keycloak_admin
+from app import audit, keycloak_admin
 from app.db import get_session
 from app.models import Organization
 from app.schemas import OrganizationCreate, OrganizationOut
@@ -30,6 +30,13 @@ async def create_organization(
     kc_org_id = await keycloak_admin.create_organization(body.name, body.domain)
     org = Organization(id=UUID(kc_org_id), name=body.name)
     session.add(org)
+    await audit.record(
+        session,
+        actor=user.sub,
+        action="organization.create",
+        target_type="organization",
+        target_id=org.id,
+    )
     await session.commit()
     await session.refresh(org)
     return org
@@ -74,7 +81,14 @@ async def delete_organization(
     deleted = (await session.execute(statement)).scalar()
     if deleted is None:
         raise HTTPException(status_code=404, detail="organization not found")
-    
+
+    await audit.record(
+        session,
+        actor=user.sub,
+        action="organization.delete",
+        target_type="organization",
+        target_id=org_id,
+    )
     await session.commit()
     await keycloak_admin.delete_organization(str(org_id))
     

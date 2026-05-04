@@ -2,9 +2,9 @@ import secrets
 from typing import Annotated
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app import keycloak_admin
+from app import audit, keycloak_admin
 from app.db import get_session
 from app.models import Membership, Organization
 from app.schemas import (
@@ -53,6 +53,13 @@ async def create_member(
                 keycloak_user_id=UUID(user_id),
                 role=body.role,
             )
+        )
+        await audit.record(
+            session,
+            actor=user.sub,
+            action="member.create",
+            target_type="membership",
+            target_id=UUID(user_id),
         )
         await session.commit()
     except Exception:
@@ -106,34 +113,103 @@ async def list_members(
     return out
 
 
+async def _ensure_not_last_admin(
+    session: AsyncSession, org_id: UUID, excluding_user_id: UUID
+) -> None:
+    remaining = await session.scalar(
+        select(func.count())
+        .select_from(Membership)
+        .where(
+            Membership.organization_id == org_id,
+            Membership.role == "customer_admin",
+            Membership.keycloak_user_id != excluding_user_id,
+        )
+    )
+    if not remaining:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="cannot remove the last customer_admin of the organization",
+        )
+
+
+async def _ensure_user_only_in_org(
+    session: AsyncSession, user_id: UUID, org_id: UUID
+) -> None:
+    other = await session.scalar(
+        select(func.count())
+        .select_from(Membership)
+        .where(
+            Membership.keycloak_user_id == user_id,
+            Membership.organization_id != org_id,
+        )
+    )
+    if other:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="user belongs to other organizations; remove from this org instead",
+        )
+
+
 @router.patch("/{user_id}", response_model=MemberOut)
 async def update_member(
+    org_id: UUID,
     user_id: UUID,
     body: MemberUpdate,
     session: Annotated[AsyncSession, Depends(get_session)],
     membership: TargetMembershipDep,
     user: Annotated[CurrentUser, Depends(require_customer_admin_for_org)],
 ) -> MemberOut:
+    if membership.role == "customer_admin" and body.role != "customer_admin":
+        await _ensure_not_last_admin(session, org_id, user_id)
     membership.role = body.role
+    await audit.record(
+        session,
+        actor=user.sub,
+        action="member.update_role",
+        target_type="membership",
+        target_id=user_id,
+    )
     await session.commit()
     return MemberOut(id=user_id, enabled=True, role=body.role)
 
 
 @router.post("/{user_id}/deactivate", status_code=status.HTTP_204_NO_CONTENT)
 async def deactivate_member(
+    org_id: UUID,
     user_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
     membership: TargetMembershipDep,
     user: Annotated[CurrentUser, Depends(require_customer_admin_for_org)],
 ) -> None:
+    await _ensure_user_only_in_org(session, user_id, org_id)
+    await audit.record(
+        session,
+        actor=user.sub,
+        action="member.deactivate",
+        target_type="membership",
+        target_id=user_id,
+    )
+    await session.commit()
     await keycloak_admin.disable_user(str(user_id))
 
 
 @router.post("/{user_id}/activate", status_code=status.HTTP_204_NO_CONTENT)
 async def activate_member(
+    org_id: UUID,
     user_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
     membership: TargetMembershipDep,
     user: Annotated[CurrentUser, Depends(require_customer_admin_for_org)],
 ) -> None:
+    await _ensure_user_only_in_org(session, user_id, org_id)
+    await audit.record(
+        session,
+        actor=user.sub,
+        action="member.activate",
+        target_type="membership",
+        target_id=user_id,
+    )
+    await session.commit()
     await keycloak_admin.enable_user(str(user_id))
 
 
@@ -150,12 +226,21 @@ async def remove_member(
             Membership.organization_id == org_id,
             Membership.keycloak_user_id == user_id,
         )
-        .returning(Membership.organization_id)
+        .returning(Membership.role)
     )
-    deleted = (await session.execute(stmt)).scalar()
-    if deleted is None:
+    deleted_role = (await session.execute(stmt)).scalar()
+    if deleted_role is None:
         raise HTTPException(status_code=404, detail="membership not found")
+    if deleted_role == "customer_admin":
+        await _ensure_not_last_admin(session, org_id, user_id)
 
+    await audit.record(
+        session,
+        actor=user.sub,
+        action="member.delete",
+        target_type="membership",
+        target_id=user_id,
+    )
     await session.commit()
     await keycloak_admin.remove_user_from_organization(str(user_id), str(org_id))
-    
+

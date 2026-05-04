@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 from uuid import UUID, uuid4
-from sqlalchemy import Enum, ForeignKey, UniqueConstraint, func
+from sqlalchemy import Enum, ForeignKey, Index, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db import Base
 
@@ -25,7 +25,9 @@ class Membership(Base):
     __table_args__ = (UniqueConstraint("organization_id", "keycloak_user_id"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"))
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     keycloak_user_id: Mapped[UUID]
     role: Mapped[str]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
@@ -51,3 +53,19 @@ class Subscription(Base):
         default=SubscriptionStatus.active,
     )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_target", "target_type", "target_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    actor_user_id: Mapped[UUID] = mapped_column(index=True)
+    action: Mapped[str]
+    target_type: Mapped[str]
+    target_id: Mapped[UUID]
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), index=True
+    )

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from app import audit
 from app.db import get_session
 from app.models import Organization, Subscription, SubscriptionStatus
 from app.schemas import SubscriptionCreate, SubscriptionOut, SubscriptionUpdate
@@ -29,13 +30,21 @@ async def create_subscription(
     sub = Subscription(organization_id=org_id, app_code=body.app_code)
     session.add(sub)
     try:
-        await session.commit()
+        await session.flush()
     except IntegrityError:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"organization already has a subscription for '{body.app_code}'",
         )
+    await audit.record(
+        session,
+        actor=user.sub,
+        action="subscription.create",
+        target_type="subscription",
+        target_id=sub.id,
+    )
+    await session.commit()
     await session.refresh(sub)
     return sub
 
@@ -71,6 +80,13 @@ async def update_subscription(
     if sub is None:
         raise HTTPException(status_code=404, detail="subscription not found")
     sub.status = SubscriptionStatus(body.status)
+    await audit.record(
+        session,
+        actor=user.sub,
+        action="subscription.update",
+        target_type="subscription",
+        target_id=sub.id,
+    )
     await session.commit()
     await session.refresh(sub)
     return sub

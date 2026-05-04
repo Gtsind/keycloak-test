@@ -76,3 +76,14 @@ class MyAppOut(BaseModel):
     organization_id: UUID
     organization_name: str
     app_code: str
+
+
+class AuditLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    actor_user_id: UUID
+    action: str
+    target_type: str
+    target_id: UUID
+    created_at: datetime
