@@ -91,6 +91,8 @@ async def require_customer_admin_for_org(
     user: CurrentUserDep,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> CurrentUser:
+    if "aibydna_admin" in user.realm_roles:
+        return user
     if org_id not in user.org_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not a member of this organization")
     role = await _membership_role(session, org_id, user.sub)

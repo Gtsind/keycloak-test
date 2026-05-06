@@ -78,6 +78,12 @@ class MyAppOut(BaseModel):
     app_code: str
 
 
+class MyMembershipOut(BaseModel):
+    organization_id: UUID
+    organization_name: str
+    role: MembershipRole
+
+
 class AuditLogOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

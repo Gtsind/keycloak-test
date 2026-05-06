@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.db import Base, engine
 from app.routers import audit, me, members, organizations, subscriptions
 
@@ -10,6 +11,13 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="aibydna user-service", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(organizations.router)
 app.include_router(members.router)
 app.include_router(subscriptions.router)
