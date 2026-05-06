@@ -53,10 +53,33 @@ export interface MemberCreateOut extends Member {
   temporary_password: string;
 }
 
+export interface Application {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface ApplicationCreate {
+  code: string;
+  name: string;
+  description?: string | null;
+  enabled?: boolean;
+}
+
+export interface ApplicationUpdate {
+  name?: string;
+  description?: string | null;
+  enabled?: boolean;
+}
+
 export interface Subscription {
   id: string;
   organization_id: string;
-  app_code: string;
+  application_id: string;
+  application: Application;
   status: SubscriptionStatus;
   created_at: string;
 }

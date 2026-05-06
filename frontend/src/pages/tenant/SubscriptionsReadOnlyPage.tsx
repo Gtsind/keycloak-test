@@ -20,7 +20,7 @@ function Page({ orgId }: { orgId: string }) {
   );
 
   const columns: Column<Subscription>[] = [
-    { header: "App", cell: (s) => s.app_code },
+    { header: "App", cell: (s) => `${s.application.name} (${s.application.code})` },
     { header: "Status", cell: (s) => s.status },
     {
       header: "Created",

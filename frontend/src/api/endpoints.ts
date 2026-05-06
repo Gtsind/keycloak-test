@@ -1,4 +1,7 @@
 import type {
+  Application,
+  ApplicationCreate,
+  ApplicationUpdate,
   AuditFilters,
   AuditLog,
   Member,
@@ -56,6 +59,24 @@ export const deleteMember = (orgId: string, userId: string) =>
   apiFetch<void>(`/organizations/${orgId}/users/${userId}`, {
     method: "DELETE",
   });
+
+// Applications
+export const listApplications = (enabledOnly = false) =>
+  apiFetch<Application[]>(
+    `/applications${enabledOnly ? "?enabled_only=true" : ""}`,
+  );
+export const createApplication = (input: ApplicationCreate) =>
+  apiFetch<Application>("/applications", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+export const updateApplication = (id: string, patch: ApplicationUpdate) =>
+  apiFetch<Application>(`/applications/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+export const deleteApplication = (id: string) =>
+  apiFetch<void>(`/applications/${id}`, { method: "DELETE" });
 
 // Subscriptions
 export const listSubscriptions = (orgId: string) =>

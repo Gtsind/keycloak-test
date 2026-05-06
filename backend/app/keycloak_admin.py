@@ -94,6 +94,11 @@ async def assign_realm_role(user_id: str, role_name: str) -> None:
     await _admin().a_assign_realm_roles(user_id=user_id, roles=[role])
 
 
+async def remove_realm_role(user_id: str, role_name: str) -> None:
+    role = await _get_realm_role(role_name)
+    await _admin().a_delete_realm_roles_of_user(user_id=user_id, roles=[role])
+
+
 # Organization memberships
 
 async def add_user_to_organization(user_id: str, organization_id: str) -> None:

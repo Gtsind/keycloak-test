@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -46,16 +47,52 @@ class MemberUpdate(BaseModel):
     role: MembershipRole
 
 
+_APP_CODE_RE = re.compile(r"^[a-z0-9_-]+$")
+
+
+def _normalize_code(v: str) -> str:
+    v = v.strip().lower()
+    if not _APP_CODE_RE.match(v):
+        raise ValueError("code must match [a-z0-9_-]+")
+    return v
+
+
+class ApplicationCreate(BaseModel):
+    code: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str | None = None
+    enabled: bool = True
+
+    @field_validator("code")
+    @classmethod
+    def _v_code(cls, v: str) -> str:
+        return _normalize_code(v)
+
+
+class ApplicationUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+    enabled: bool | None = None
+
+
+class ApplicationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    code: str
+    name: str
+    description: str | None = None
+    enabled: bool
+    created_at: datetime
+
+
 class SubscriptionCreate(BaseModel):
     app_code: str = Field(min_length=1)
 
     @field_validator("app_code")
     @classmethod
     def _normalize(cls, v: str) -> str:
-        v = v.strip().lower()
-        if not v:
-            raise ValueError("app_code must not be blank")
-        return v
+        return _normalize_code(v)
 
 
 class SubscriptionUpdate(BaseModel):
@@ -67,7 +104,8 @@ class SubscriptionOut(BaseModel):
 
     id: UUID
     organization_id: UUID
-    app_code: str
+    application_id: UUID
+    application: ApplicationOut
     status: SubscriptionStatus
     created_at: datetime
 

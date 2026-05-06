@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     keycloak_admin_client_id: str
     keycloak_admin_client_secret: str
     keycloak_issuer: str | None = None # Issuer value as it appears in tokens. Falls back to {keycloak_url}/realms/{realm} if unset.
+    keycloak_expected_audience: str = "user-service-client"
 
     model_config = SettingsConfigDict(env_file=str(_ENV_FILE))
 

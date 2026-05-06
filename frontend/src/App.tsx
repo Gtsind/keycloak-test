@@ -7,6 +7,7 @@ import { Layout } from "./components/Layout";
 import { RequireOrgRole } from "./auth/RequireOrgRole";
 import { Forbidden } from "./pages/Forbidden";
 import { HomeRouter } from "./pages/HomeRouter";
+import { ApplicationsPage } from "./pages/admin/ApplicationsPage";
 import { AuditLogPage } from "./pages/admin/AuditLogPage";
 import { OrganizationDetailPage } from "./pages/admin/OrganizationDetailPage";
 import { OrganizationsPage } from "./pages/admin/OrganizationsPage";
@@ -55,6 +56,14 @@ export default function App() {
                         element={
                           <ProtectedRoute requiredRole="aibydna_admin">
                             <OrganizationDetailPage />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/admin/applications"
+                        element={
+                          <ProtectedRoute requiredRole="aibydna_admin">
+                            <ApplicationsPage />
                           </ProtectedRoute>
                         }
                       />

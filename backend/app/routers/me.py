@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
-from app.models import Membership, Organization, Subscription, SubscriptionStatus
+from app.models import Application, Membership, Organization, Subscription, SubscriptionStatus
 from app.schemas import MyAppOut, MembershipRole, MyMembershipOut
 from app.security import CurrentUser, get_current_user
 
@@ -16,14 +16,15 @@ async def list_my_apps(
     user: Annotated[CurrentUser, Depends(get_current_user)],
 ) -> list[MyAppOut]:
     rows = (await session.execute(
-        select(Organization.id, Organization.name, Subscription.app_code)
+        select(Organization.id, Organization.name, Application.code)
         .join(Membership, Membership.organization_id == Organization.id)
         .join(Subscription, Subscription.organization_id == Organization.id)
+        .join(Application, Application.id == Subscription.application_id)
         .where(
             Membership.keycloak_user_id == user.sub,
             Subscription.status == SubscriptionStatus.active,
         )
-        .order_by(Organization.name, Subscription.app_code)
+        .order_by(Organization.name, Application.code)
     )).all()
     return [
         MyAppOut(organization_id=org_id, organization_name=name, app_code=app_code)

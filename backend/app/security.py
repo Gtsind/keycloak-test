@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.db import get_session
-from app.models import Membership, Subscription, SubscriptionStatus
+from app.models import Application, Membership, Subscription, SubscriptionStatus
 
 bearer_scheme = HTTPBearer()
 
@@ -52,7 +52,7 @@ async def get_current_user(
             signing_key,
             algorithms=["RS256"],
             issuer=settings.issuer,
-            options={"verify_aud": False},
+            audience=settings.keycloak_expected_audience,
         )
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"invalid token: {exc}") from exc
@@ -128,9 +128,10 @@ def require_app_access(app_code: str):
         rows = (await session.execute(
             select(Membership.organization_id, Membership.role)
             .join(Subscription, Subscription.organization_id == Membership.organization_id)
+            .join(Application, Application.id == Subscription.application_id)
             .where(
                 Membership.keycloak_user_id == user.sub,
-                Subscription.app_code == app_code,
+                Application.code == app_code,
                 Subscription.status == SubscriptionStatus.active,
             )
         )).all()

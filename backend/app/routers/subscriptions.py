@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app import audit
 from app.db import get_session
-from app.models import Organization, Subscription, SubscriptionStatus
+from app.models import Application, Organization, Subscription, SubscriptionStatus
 from app.schemas import SubscriptionCreate, SubscriptionOut, SubscriptionUpdate
 from app.security import (
     CurrentUser,
@@ -15,6 +15,21 @@ from app.security import (
 )
 
 router = APIRouter(prefix="/organizations/{org_id}/apps", tags=["subscriptions"])
+
+
+async def _resolve_app(session: AsyncSession, code: str) -> Application:
+    app_row = await session.scalar(select(Application).where(Application.code == code))
+    if app_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unknown application '{code}'",
+        )
+    if not app_row.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"application '{code}' is disabled",
+        )
+    return app_row
 
 
 @router.post("", response_model=SubscriptionOut, status_code=status.HTTP_201_CREATED)
@@ -27,7 +42,8 @@ async def create_subscription(
     org = await session.get(Organization, org_id)
     if org is None:
         raise HTTPException(status_code=404, detail="organization not found")
-    sub = Subscription(organization_id=org_id, app_code=body.app_code)
+    app_row = await _resolve_app(session, body.app_code)
+    sub = Subscription(organization_id=org_id, application_id=app_row.id)
     session.add(sub)
     try:
         await session.flush()
@@ -72,9 +88,11 @@ async def update_subscription(
     user: Annotated[CurrentUser, Depends(require_realm_role("aibydna_admin"))],
 ) -> Subscription:
     sub = await session.scalar(
-        select(Subscription).where(
+        select(Subscription)
+        .join(Application, Application.id == Subscription.application_id)
+        .where(
             Subscription.organization_id == org_id,
-            Subscription.app_code == app_code,
+            Application.code == app_code,
         )
     )
     if sub is None:

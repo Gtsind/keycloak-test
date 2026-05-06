@@ -46,7 +46,7 @@ async def create_member(
     )
     try:
         await keycloak_admin.add_user_to_organization(user_id, str(org_id))
-        await keycloak_admin.assign_realm_role(user_id, "customer_user")
+        await keycloak_admin.assign_realm_role(user_id, body.role)
         session.add(
             Membership(
                 organization_id=org_id,
@@ -159,8 +159,11 @@ async def update_member(
     membership: TargetMembershipDep,
     user: Annotated[CurrentUser, Depends(require_customer_admin_for_org)],
 ) -> MemberOut:
+    if membership.role == body.role:
+        return MemberOut(id=user_id, enabled=True, role=body.role)
     if membership.role == "customer_admin" and body.role != "customer_admin":
         await _ensure_not_last_admin(session, org_id, user_id)
+    previous_role = membership.role
     membership.role = body.role
     await audit.record(
         session,
@@ -169,7 +172,14 @@ async def update_member(
         target_type="membership",
         target_id=user_id,
     )
-    await session.commit()
+    await keycloak_admin.assign_realm_role(str(user_id), body.role)
+    try:
+        await keycloak_admin.remove_realm_role(str(user_id), previous_role)
+        await session.commit()
+    except Exception:
+        await keycloak_admin.remove_realm_role(str(user_id), body.role)
+        await keycloak_admin.assign_realm_role(str(user_id), previous_role)
+        raise
     return MemberOut(id=user_id, enabled=True, role=body.role)
 
 

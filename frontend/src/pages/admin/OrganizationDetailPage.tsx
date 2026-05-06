@@ -4,6 +4,7 @@ import { getCached, invalidate, ApiError } from "../../api/client";
 import {
   createSubscription,
   getOrganization,
+  listApplications,
   listSubscriptions,
   updateSubscription,
 } from "../../api/endpoints";
@@ -71,18 +72,24 @@ function SubscriptionsManager({
   subs: Subscription[];
   onChange: () => void;
 }) {
-  const [appCode, setAppCode] = useState("");
+  const apps = use(getCached("apps:enabled", () => listApplications(true)));
+  const available = apps.filter(
+    (a) => a.enabled && !subs.some((s) => s.application_id === a.id),
+  );
+  const [selected, setSelected] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const code = selected || available[0]?.code || "";
+
   const onAdd = async (e: FormEvent) => {
     e.preventDefault();
-    if (!appCode.trim()) return;
+    if (!code) return;
     setSubmitting(true);
     setError(null);
     try {
-      await createSubscription(orgId, appCode.trim());
-      setAppCode("");
+      await createSubscription(orgId, code);
+      setSelected("");
       onChange();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed");
@@ -97,7 +104,7 @@ function SubscriptionsManager({
   ) => {
     setError(null);
     try {
-      await updateSubscription(orgId, sub.app_code, status);
+      await updateSubscription(orgId, sub.application.code, status);
       onChange();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed");
@@ -105,7 +112,10 @@ function SubscriptionsManager({
   };
 
   const columns: Column<Subscription>[] = [
-    { header: "App", cell: (s) => s.app_code },
+    {
+      header: "App",
+      cell: (s) => `${s.application.name} (${s.application.code})`,
+    },
     {
       header: "Status",
       cell: (s) => (
@@ -131,15 +141,31 @@ function SubscriptionsManager({
   return (
     <div style={{ display: "grid", gap: "var(--space-3)" }}>
       {error && <Banner kind="error">{error}</Banner>}
-      <form onSubmit={onAdd} style={{ display: "flex", gap: "var(--space-2)" }}>
-        <input
-          value={appCode}
-          onChange={(e) => setAppCode(e.target.value)}
-          placeholder="app code (e.g. crm, ticketing)"
-          style={{ ...inputStyle, flex: 1 }}
-        />
-        <Button disabled={submitting || !appCode.trim()}>Add</Button>
-      </form>
+      {available.length === 0 ? (
+        <div style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+          {apps.length === 0
+            ? "No applications exist yet."
+            : "All available applications are already subscribed."}
+        </div>
+      ) : (
+        <form
+          onSubmit={onAdd}
+          style={{ display: "flex", gap: "var(--space-2)" }}
+        >
+          <select
+            value={code}
+            onChange={(e) => setSelected(e.target.value)}
+            style={{ ...selectStyle, flex: 1 }}
+          >
+            {available.map((a) => (
+              <option key={a.id} value={a.code}>
+                {a.name} ({a.code})
+              </option>
+            ))}
+          </select>
+          <Button disabled={submitting || !code}>Add</Button>
+        </form>
+      )}
       <Table
         columns={columns}
         rows={subs}
@@ -149,15 +175,6 @@ function SubscriptionsManager({
     </div>
   );
 }
-
-const inputStyle = {
-  padding: "var(--space-2)",
-  borderRadius: "var(--radius)",
-  border: "1px solid var(--border)",
-  background: "var(--bg)",
-  color: "var(--text)",
-  fontSize: "1rem",
-} as const;
 
 const selectStyle = {
   padding: "var(--space-1) var(--space-2)",
